@@ -1,0 +1,161 @@
+import tkinter as tk
+from tkinter import messagebox
+import time
+from PIL import Image, ImageTk
+class HashiGame:
+    def __init__(self,root):
+        self.root=root
+        self.root.title("Hashiwokakero-Bridge Building Puzzle")
+        self.root.attributes("-fullscreen",True)
+        self.screen_width=self.root.winfo_screenwidth()
+        self.screen_height=self.root.winfo_screenheight()
+        self.bg_image=Image.open("C:/Users/Admin/Desktop/Shehnaaz Begum BSc CsM/Project materials/9.jpg")
+        self.bg_image=self.bg_image.resize((self.screen_width,self.screen_height),Image.LANCZOS)
+        self.bg_photo=ImageTk.PhotoImage(self.bg_image)
+        self.canvas=tk.Canvas(self.root,width=self.screen_width,height=self.screen_height)
+        self.canvas.pack()
+        self.canvas.create_image(0,0,anchor=tk.NW,image=self.bg_photo)
+        self.rules_frame=tk.Frame(self.root,bg="black")
+        self.rules_label=tk.Label(self.rules_frame,text=self.get_rules_text(),font=("Arial",14),wraplength=550,justify="left",fg="green",bg="black")
+        self.rules_label.pack(pady=20)
+        self.continue_button=tk.Button(self.rules_frame,text="Continue",command=self.start_game,borderwidth=2,highlightbackground='black',fg='green',bg='black')
+        self.continue_button.pack(pady=20)
+        self.continue_button.config(highlightbackground="black",highlightcolor="green",activebackground="black",activeforeground="green")
+        self.rules_frame.place(relx=0.5,rely=0.5,anchor=tk.CENTER)
+        self.time_left=180
+        self.timer_label=tk.Label(self.root,font=("Arial", 16),bg="black",fg="green")
+        self.timer_label.place(x=10, y=10)
+        self.islands={}
+        self.bridges=[]
+        self.selected_island=None
+    def get_rules_text(self):
+        return ("Welcome to Hashiwokakero!\n\n"
+            "The rules are simple:\n"
+            "1. Each island has a number representing how many bridges must connect to it.\n"
+            "2. Bridges can only be horizontal or vertical.\n"
+            "3. No more than two bridges can connect a pair of islands.\n"
+            "4. Bridges cannot cross over each other.\n"
+            "5. The bridges must form a single continuous path connecting all islands.\n\n"
+            "You have 3 minutes to complete the puzzle. Good luck!")
+    def start_game(self):
+        self.rules_frame.destroy()
+        self.create_puzzle()
+        self.start_timer()
+    def start_timer(self):
+        self.update_timer()
+    def update_timer(self):
+        minutes,seconds=divmod(self.time_left,60)
+        time_format=f"{minutes:02}:{seconds:02}"
+        self.timer_label.config(text=f"Time left:{time_format}")
+        if self.time_left>0:
+            self.time_left-=1
+            self.root.after(1000,self.update_timer)
+        else:
+            messagebox.showinfo("Time's Up!","You ran out of time!")
+            self.root.quit()
+    def create_puzzle(self):
+        screen_width=self.root.winfo_screenwidth()
+        screen_height=self.root.winfo_screenheight()
+        self.island_positions=[(screen_width*0.2,screen_height*0.2,2),(screen_width*0.4,screen_height*0.2,4), 
+            (screen_width*0.6,screen_height*0.2,1),(screen_width*0.5,screen_height*0.3,1), 
+            (screen_width*0.7,screen_height*0.3,3),(screen_width*0.2,screen_height*0.4,4),
+            (screen_width*0.4,screen_height*0.4,6),(screen_width*0.6,screen_height*0.4,3), 
+            (screen_width*0.4,screen_height*0.5,3),(screen_width*0.6,screen_height*0.5,5),
+            (screen_width*0.7,screen_height*0.5,5),(screen_width*0.2,screen_height*0.6,2), 
+            (screen_width*0.5,screen_height*0.6,1),(screen_width*0.3,screen_height*0.7,1), 
+            (screen_width*0.6,screen_height*0.7,2),(screen_width*0.7,screen_height*0.7,3)]
+        for x,y,bridges_needed in self.island_positions:
+            island_id=self.canvas.create_oval(x-20,y-20,x+20,y+20,fill="black",outline="green",width=2)
+            self.canvas.create_text(x,y,text=str(bridges_needed),font=("Arial",14),fill="green")
+            self.islands[island_id]={'x':x,'y':y,'bridges_needed':bridges_needed,'bridges':0}
+        self.canvas.bind("<Button-1>",self.on_click)
+    def on_click(self,event):
+        clicked_island=self.get_island_at(event.x,event.y)
+        if clicked_island:
+            if self.selected_island:
+                self.connect_islands(self.selected_island,clicked_island)
+                self.selected_island=None
+            else:
+                self.selected_island=clicked_island
+        else:
+            self.selected_island=None
+    def get_island_at(self,x,y):
+        for island_id,island_data in self.islands.items():
+            ix,iy=island_data['x'],island_data['y']
+            if(ix-20<=x<=ix+20)and(iy-20<=y<=iy+20):
+                return island_id
+        return None
+    def connect_islands(self,island1,island2):
+        if island1==island2:
+            return
+        x1,y1=self.islands[island1]['x'],self.islands[island1]['y']
+        x2,y2=self.islands[island2]['x'],self.islands[island2]['y']
+        if x1==x2 or y1==y2:
+            if self.is_third_island_between(x1,y1,x2,y2):
+                return
+            connection_pair=(island1,island2)if(island1,island2)in self.bridges else(island2,island1)
+            bridge_count=self.bridges.count(connection_pair)
+            if bridge_count<2:
+                if not self.is_bridge_crossing(x1,y1,x2,y2):
+                    self.bridges.append(connection_pair)
+                    width=4 if bridge_count==1 else 2
+                    self.canvas.create_line(x1,y1,x2,y2,width=width,fill="green")
+                    self.islands[island1]['bridges']+=1
+                    self.islands[island2]['bridges']+=1
+                    self.check_win()
+                else:
+                    messagebox.showinfo("Invalid Move","Bridges cannot cross each other.")
+            else:
+                self.clear_bridges_between(island1,island2)
+    def clear_bridges_between(self,island1,island2):
+        x1,y1=self.islands[island1]['x'],self.islands[island1]['y']
+        x2,y2=self.islands[island2]['x'],self.islands[island2]['y']
+        self.bridges=[bridge for bridge in self.bridges if not(bridge==(island1,island2)or bridge==(island2,island1))]
+        for item in self.canvas.find_all():
+            coords=self.canvas.coords(item)
+            if len(coords)==4:
+                if (coords[0]==x1 and coords[1]==y1 and coords[2]==x2 and coords[3]==y2) or \
+                (coords[0]==x2 and coords[1]==y2 and coords[2]==x1 and coords[3]==y1):
+                    self.canvas.delete(item)
+        self.islands[island1]['bridges']-=1
+        self.islands[island2]['bridges']-=1
+        self.check_win()
+    def check_win(self):
+        all_correct=True
+        for island_id, island_data in self.islands.items():
+            if island_data['bridges']!=island_data['bridges_needed']:
+                all_correct=False
+                break
+        if all_correct:
+            messagebox.showinfo("Congratulations!","You have solved the puzzle!")
+            self.root.quit()
+    def is_bridge_crossing(self, x1, y1, x2, y2):
+        for bridge in self.bridges:
+            island_a,island_b=bridge
+            x_a,y_a=self.islands[island_a]['x'],self.islands[island_a]['y']
+            x_b,y_b=self.islands[island_b]['x'],self.islands[island_b]['y']
+            if self.do_lines_cross(x1,y1,x2,y2,x_a,y_a,x_b,y_b):
+                return True
+        return False
+    def do_lines_cross(self, x1, y1, x2, y2, x3, y3, x4, y4):
+        def direction(xi,yi,xj,yj,xk,yk):
+            return (xk-xi)*(yj-yi)-(xj-xi)*(yk-yi)
+        d1=direction(x3,y3,x4,y4,x1,y1)
+        d2=direction(x3,y3,x4,y4,x2,y2)
+        d3=direction(x1,y1,x2,y2,x3,y3)
+        d4=direction(x1,y1,x2,y2,x4,y4)
+        return d1*d2<0 and d3*d4<0
+    def is_third_island_between(self, x1, y1, x2, y2):
+        if x1==x2:
+            for island in self.islands.values():
+                if island['x']==x1 and min(y1,y2)<island['y']<max(y1,y2):
+                    return True
+        elif y1==y2:
+            for island in self.islands.values():
+                if island['y']==y1 and min(x1,x2)<island['x']<max(x1,x2):
+                    return True
+        return False
+if __name__=="__main__":
+    root=tk.Tk()
+    game=HashiGame(root)
+    root.mainloop()
